@@ -1,0 +1,105 @@
+import groovyx.net.http.HttpBuilder
+import org.jsoup.nodes.Document
+
+buildscript {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath 'io.github.http-builder-ng:http-builder-ng-core:1.0.4'
+        classpath 'org.jsoup:jsoup:1.9.2'
+    }
+}
+
+apply plugin: 'base'
+apply plugin: "com.palantir.docker"
+
+enum DistributionType {
+    bin, all
+}
+
+class GradleDistribution {
+    private final DistributionType type
+    private final String version
+    private final URL url
+    private final URL shaUrl
+    private Project project
+
+    GradleDistribution(DistributionType type, String version, Project project) {
+        this.type = type
+        this.version = version
+        String urlStr = "https://services.gradle.org/distributions/gradle-${version}-${type}.zip"
+        this.url = urlStr.toURL()
+        this.shaUrl = "${urlStr}.sha256".toURL()
+        this.project = project
+    }
+
+    URL getUrl() {
+        url
+    }
+
+    URL getShaUrl() {
+        shaUrl
+    }
+
+    File getDir() {
+        project.file("${project.buildDir}/distributions/")
+    }
+
+    String getTopLevelDir() {
+        "gradle-" + version
+    }
+
+    String getFileName() {
+        new File(url.getFile()).name
+    }
+
+    File getFile() {
+        String directory = dir.absolutePath
+        new File(directory, fileName)
+    }
+
+    String toString() {
+        "Gradle ${version}-${type}: ${file}"
+    }
+}
+
+task gradleDistributions() {
+    doLast {
+        logger.lifecycle("Get all Gradle distributions.")
+        Document page = HttpBuilder.configure {
+            request.uri = 'https://services.gradle.org/distributions/'
+        }.get() as Document
+        def versions = []
+        page.select("a[href]").collect { it.attr('href') }.each { String href ->
+            (href =~ /^\/distributions\/gradle-(.*)-(bin|all)\.zip(\.sha256)?$/).each {
+                String version = it[1]
+                String type = it[2]
+                if (version ==~ /(^[456].*$)/) {
+                    if (version.contains("-rc-") || version.contains("-milestone-")) {
+                        logger.info("Ignore RC/Milestone ${version}")
+                    } else if ("bin" == type) {
+                        logger.info("BIN distribution, ${version}")
+                    } else {
+                        versions << version
+                    }
+                }
+            }
+        }
+        def urls = []
+        versions.findAll().toSet().each { String version ->
+            DistributionType.values().each { DistributionType type ->
+                def dist = new GradleDistribution(type, version, project)
+                urls << dist.url.toString()
+                urls << dist.shaUrl.toString()
+            }
+        }
+        file("${buildDir}/urls.txt").text = urls.join("\n")
+        logger.lifecycle("Urls are generated for Gradle distributions.")
+    }
+}
+
+task downloadAll(dependsOn: gradleDistributions, type: Exec) {
+    commandLine "aria2c", "-d", "${buildDir}/distributions", "--continue=true", "-x", 16, "-s", 2, "-i", "${buildDir}/urls.txt"
+}
