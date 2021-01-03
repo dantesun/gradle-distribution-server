@@ -10,6 +10,9 @@ server.
 3. docker-compose.yml: A Nexus 3 server runs locally using Docker.
 4. https://github.com/ddimtirov/gwo-agent: Hacks gradle wrapper. Allows
    you replace distribution_url in wrapper.properties
+5. A private Gradle distribution server will provide a stable building
+   environment in Enterprise.
+
 
 ## Why
 
