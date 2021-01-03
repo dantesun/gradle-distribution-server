@@ -1,0 +1,56 @@
+# Traefik TSL Configuration: https://traefik.io/blog/traefik-2-tls-101-23b4fbee81f1/
+# https://serverfault.com/questions/880804/can-not-get-rid-of-neterr-cert-common-name-invalid-error-in-chrome-with-self
+version: "3.8"
+volumes:
+  npm-mysql-data:
+services:
+  traefik:
+    restart: always
+    image: traefik:v2.2
+    command:
+      - --api.insecure=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.web-secure.address=:443 #Declares the web-secure entrypoint in Traefik
+      - --providers.docker=true
+      - --providers.file.directory=/configuration/
+      - --providers.file.watch=true
+    ports:
+      - '80:80'
+      - '443:443'
+      - '8080:8080'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOME}/tools/traefik/:/configuration/
+    depends_on:
+      - nexus
+  nexus:
+    restart: always
+    image: sonatype/nexus3:latest
+    labels:
+      - "traefik.http.routers.nexus.rule=Host(`nexus.docker.local`) || Host(`private.services.gradle.org`)"
+    volumes:
+      - ${HOME}/workspace/nexus-data:/nexus-data
+#  gradle-dist:
+#    restart: always
+#    image: nginx
+#    labels:
+#      - "traefik.http.routers.gradle-dist.rule=Host(`gradle.noware.cn`)"
+                - "traefik.tcp.routers.gradle-dist.tls.passthrough=true"
+              - "traefik.http.routers.gradle-dist.tls=true"
+#    volumes:
+#      - ${HOME}/workspace/gradle-dist-mirror/data:/usr/share/nginx/html
+#      - ${HOME}/workspace/gradle-dist-mirror/nginx:/etc/nginx
+
+#     swagger:
+#         restart: always
+#         image: swaggerapi/swagger-editor
+#         labels:
+#           - "traefik.http.routers.swagger.rule=Host(`swagger.docker.local`)"
+#           - "traefik.http.services.swagger.loadbalancer.server.port=8080"
+#     mysql:
+#         restart: always
+#         image: mysql:5.7.31
+#         ports: ["13306:3306"]
+#         environment:
+#           - MYSQL_ALLOW_EMPTY_PASSWORD=1
+
