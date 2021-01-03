@@ -35,8 +35,8 @@ services:
 #    image: nginx
 #    labels:
 #      - "traefik.http.routers.gradle-dist.rule=Host(`gradle.noware.cn`)"
-                - "traefik.tcp.routers.gradle-dist.tls.passthrough=true"
-              - "traefik.http.routers.gradle-dist.tls=true"
+#                - "traefik.tcp.routers.gradle-dist.tls.passthrough=true"
+#              - "traefik.http.routers.gradle-dist.tls=true"
 #    volumes:
 #      - ${HOME}/workspace/gradle-dist-mirror/data:/usr/share/nginx/html
 #      - ${HOME}/workspace/gradle-dist-mirror/nginx:/etc/nginx
