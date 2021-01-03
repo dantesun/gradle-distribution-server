@@ -47,12 +47,6 @@ while (("$#")); do
   -d)
     if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
       DOWNLOAD_DIR=$2
-      [ -d "${DOWNLOAD_DIR}" ] || {
-        mkdir -p "${DOWNLOAD_DIR}" || {
-          echo "Can't creating ${DOWNLOAD_DIR}!"
-          exit 1
-        }
-      }
       shift 2
     else
       echo "Error: Argument for $1 is missing" >&2
@@ -91,11 +85,14 @@ while (("$#")); do
   esac
 done
 
-[ -d "${DOWNLOAD_DIR}" ] || {
-  echo "No -d specified!"
-  usage
-  exit 1
+[ -z "${DOWNLOAD_DIR}" ] && {
+  DOWNLOAD_DIR="build/distributions"
+  mkdir -p "${DOWNLOAD_DIR}" || {
+    echo "Can't creating ${DOWNLOAD_DIR}!"
+    exit 1
+  }
 }
+
 [ -z "${VERSIONS}" ] && {
   echo "Please use -v specify version range!"
   usage
