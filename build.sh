@@ -99,12 +99,17 @@ done
   exit 1
 }
 
-readonly VERSIONS_FILE="${PWD}/build/versions.txt"
-[ -f "build.gradle" ] || {
-  echo "No build.gradle is found!"
-  exit 1
+[ -d build ] || {
+  mkdir build
 }
 
+readonly VERSIONS_FILE="${PWD}/build/versions.txt"
+function fetch_versions() {
+  local released='select(.snapshot == false and .broken == false)'
+  local not_rc='select(.version | index("-rc-") | not)'
+  local not_milestone='select(.version | index("-milestone") | not)'
+  curl -s "https://services.gradle.org/versions/all" | jq -r "map(${released} | ${not_rc} | ${not_milestone}) | .[].version"
+}
 #Determine whether to fetch Gradle versions or not.
 FETCH_VERSIONS=1
 if ((${FORCED_VERSION_FETCH:-0} == 1)); then
@@ -114,12 +119,10 @@ elif ! [ -f "${VERSIONS_FILE}" ]; then
 else
   FETCH_VERSIONS=0
 fi
+
 if ((FETCH_VERSIONS == 1)); then
-  echo "Fetch all official released versions of Gradle. Check build.log for details "
-  ./gradlew --no-daemon -Dorg.gradle.daemon=false --info --stacktrace fetchAllVersions 2>&1 | tee build.log &>/dev/null || {
-    echo "Failed to fetch Gradle versions."
-    exit 1
-  }
+  echo "Fetch all official released versions of Gradle."
+  fetch_versions | uniq | sort > "${VERSIONS_FILE}"
 fi
 
 function validate_distribution_file() {
@@ -128,16 +131,18 @@ function validate_distribution_file() {
   file_checksum="$(openssl sha256 -r "${file}" | cut -d ' ' -f 1)"
   local checksum_file="${file}.sha256"
   [ -f "${checksum_file}" ] || {
-    echo "Downloading ${checksum_file}"
-    curl -sL "https://services.gradle.org/distributions/${checksum_file}" -o "${checksum_file}"
+    local file_name
+    file_name=$(basename "${checksum_file}")
+    echo "Downloading ${file_name}"
+    curl -sL "https://services.gradle.org/distributions/${file_name}" -o "${checksum_file}"
   }
 
   local official_checksum
   official_checksum="$(cat "${checksum_file}")"
-  if [[ "${file_checksum}" == "${official_checksum}" ]]; then
+  if [[ "${file_checksum}" = "${official_checksum}" ]]; then
     echo "${file} checksum is ok"
   else
-    echo "${file} checksum is NOT ok."
+    echo "${file} checksum is NOT ok.(Expected: ${official_checksum}, Actual: ${file_checksum}"
   fi
 }
 
@@ -160,12 +165,12 @@ while IFS= read -r version; do
   *)
   echo "https://services.gradle.org/distributions/gradle-${version}-all.zip" >> urls.txt
   echo "https://services.gradle.org/distributions/gradle-${version}-bin.zip" >> urls.txt
-  count=(count + 2)
+  count=$((count + 2))
     ;;
   esac
 done< <(awk "/^${VERSIONS}$/{ print \$0 }" "${VERSIONS_FILE}")
 
-if (( count == 0)); then
+if [[ "$count" -eq 0 ]]; then
   echo "No version is selected. Please check if '${VERSIONS}' is correct."
   exit 1
 fi
@@ -177,3 +182,6 @@ fi
 echo "Start downloading, please see aria2c.log for details."
 aria2c -l aria2c.log -d "${DOWNLOAD_DIR}" --continue=true -x 16 -s 2 -i urls.txt
 
+for f in "${DOWNLOAD_DIR}"/*.zip; do
+  validate_distribution_file "${f}"
+done
